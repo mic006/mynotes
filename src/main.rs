@@ -1,12 +1,11 @@
-#[macro_use]
-extern crate rocket;
 mod config;
-use config::AppConfig;
 
 use base64::{Engine as _, engine::general_purpose};
 use rocket::http::{Header, Status};
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::{self, Responder, Response};
+
+use config::AppConfig;
 
 /// Request guard that ensures a user is authenticated via Basic Auth.
 struct AuthenticatedUser(String);
@@ -59,19 +58,19 @@ impl<'r> Responder<'r, 'static> for BasicAuthPrompt {
     }
 }
 
-#[get("/")]
+#[rocket::get("/")]
 /// Serves the index.html file only to authenticated users.
 async fn index(_user: AuthenticatedUser) -> Option<rocket::fs::NamedFile> {
     rocket::fs::NamedFile::open("index.html").await.ok()
 }
 
-#[catch(401)]
+#[rocket::catch(401)]
 /// Catch-all for unauthorized requests, returning the Basic Auth challenge.
 fn unauthorized() -> BasicAuthPrompt {
     BasicAuthPrompt
 }
 
-#[launch]
+#[rocket::launch]
 /// Main entry point for the Rocket application.
 fn rocket() -> _ {
     let app_config = AppConfig::load();
@@ -82,6 +81,6 @@ fn rocket() -> _ {
     rocket::custom(figment)
         // Inject the loaded configuration into Rocket's state.
         .manage(app_config)
-        .mount("/", routes![index])
-        .register("/", catchers![unauthorized])
+        .mount("/", rocket::routes![index])
+        .register("/", rocket::catchers![unauthorized])
 }
