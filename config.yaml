@@ -1,6 +1,0 @@
-# TCP port of the web server
-port: 12345
-
-# authorized users; key is user name, value is user's password
-users:
-  user: "password"

@@ -73,12 +73,15 @@ fn unauthorized() -> BasicAuthPrompt {
 #[rocket::launch]
 /// Main entry point for the Rocket application.
 fn rocket() -> _ {
-    let app_config = AppConfig::load();
+    let rocket = rocket::build();
 
-    // Create a custom Rocket configuration to set the port.
-    let figment = rocket::Config::figment().merge(("port", app_config.port));
+    // Extract the custom "app" section from rocket.toml
+    let app_config: AppConfig = rocket
+        .figment()
+        .extract_inner("app")
+        .expect("Configuration 'app' section is missing in Rocket.toml");
 
-    rocket::custom(figment)
+    rocket
         // Inject the loaded configuration into Rocket's state.
         .manage(app_config)
         .mount("/", rocket::routes![index])

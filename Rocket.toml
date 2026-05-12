@@ -1,0 +1,7 @@
+[default]
+# TCP port of the web server
+port = 12345
+
+[default.app.users]
+# authorized users: user name and password mapping
+user = "password"
