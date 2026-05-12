@@ -9,12 +9,15 @@ license = "MIT"
 repository = "https://github.com/mic006/mynotes"
 
 [dependencies]
-
+base64 = "0.22.1"
+rocket = { version = "0.5.1" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_yaml = "0.9.34"
 
 [lints.rust]
 warnings = "warn"
 future-incompatible = "warn"
-let-underscore = "warn"
+let-underscore = "allow"
 nonstandard-style = "warn"
 rust-2018-idioms = "warn"
 unused = { level = "warn", priority = -1 }
