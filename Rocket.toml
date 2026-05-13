@@ -1,7 +1,12 @@
-[default]
-# TCP port of the web server
-port = 12345
+### MyNotes configuration ###
 
+# Rocket web server config
+[default]
+port = 12345
+workers = 2
+ident = false
+
+# MyNotes app config
 [default.app.users]
 # authorized users: user name and password mapping
 user = "password"
