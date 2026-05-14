@@ -1,4 +1,5 @@
 mod config;
+mod index;
 
 use base64::{Engine as _, engine::general_purpose};
 use pulldown_cmark::{Options, Parser, html};
@@ -88,6 +89,23 @@ async fn get(
     _user: AuthenticatedUser,
     config: &rocket::State<AppConfig>,
 ) -> Option<GetResponse> {
+    // Specific handling for the main page (empty path).
+    if file.as_os_str().is_empty() {
+        let mut root_node = index::Node::default();
+        index::walk(
+            config.markdown_folder.clone(),
+            &config.markdown_folder,
+            &mut root_node,
+        )
+        .await;
+        let mut html_output = String::from(
+            "<!DOCTYPE html><html><head><title>My Notes</title></head><body><h1>Notes Index</h1>",
+        );
+        root_node.render(&mut html_output);
+        html_output.push_str("</body></html>");
+        return Some(GetResponse::Html(RawHtml(html_output)));
+    }
+
     let mut path = config.markdown_folder.clone();
     path.push(file);
 
