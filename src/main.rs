@@ -1,11 +1,22 @@
 mod config;
 
 use base64::{Engine as _, engine::general_purpose};
+use pulldown_cmark::{Options, Parser, html};
+use rocket::fs::NamedFile;
 use rocket::http::{Header, Status};
 use rocket::request::{FromRequest, Outcome, Request};
-use rocket::response::{self, Responder, Response};
+use rocket::response::{self, Responder, Response, content::RawHtml};
+use std::path::PathBuf;
 
 use config::AppConfig;
+
+/// Markdown options used for all parsing operations.
+fn get_markdown_options() -> Options {
+    Options::ENABLE_TABLES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_GFM
+}
 
 /// Request guard that ensures a user is authenticated via Basic Auth.
 struct AuthenticatedUser(String);
@@ -58,10 +69,48 @@ impl<'r> Responder<'r, 'static> for BasicAuthPrompt {
     }
 }
 
-#[rocket::get("/")]
-/// Serves the index.html file only to authenticated users.
-async fn index(_user: AuthenticatedUser) -> Option<rocket::fs::NamedFile> {
-    rocket::fs::NamedFile::open("index.html").await.ok()
+/// A custom responder to handle either generated HTML content or static files.
+#[derive(rocket::Responder)]
+enum GetResponse {
+    /// Generated HTML content
+    Html(RawHtml<String>),
+    /// Static file
+    File(NamedFile),
+}
+
+#[rocket::get("/<file..>")]
+/// Serves content to authenticated users.
+///
+/// - static files are served as is
+/// - markdown files are converted to HTML
+async fn get(
+    file: PathBuf,
+    _user: AuthenticatedUser,
+    config: &rocket::State<AppConfig>,
+) -> Option<GetResponse> {
+    let mut path = config.markdown_folder.clone();
+    path.push(file);
+
+    // If the file exists and is not markdown (e.g. an image), serve it directly.
+    if let Ok(meta) = rocket::tokio::fs::metadata(&path).await {
+        if meta.is_dir() {
+            return None;
+        }
+        if path.extension().is_none_or(|ext| ext != "md") {
+            return NamedFile::open(path).await.ok().map(GetResponse::File);
+        }
+    } else if path.extension().is_none() {
+        // If the file doesn't exist and has no extension, try appending .md.
+        path.set_extension("md");
+    }
+
+    let content = rocket::tokio::fs::read_to_string(path).await.ok()?;
+
+    let parser = Parser::new_ext(&content, get_markdown_options());
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+
+    Some(GetResponse::Html(RawHtml(html_output)))
 }
 
 #[rocket::catch(401)]
@@ -84,6 +133,6 @@ fn rocket() -> _ {
     rocket
         // Inject the loaded configuration into Rocket's state.
         .manage(app_config)
-        .mount("/", rocket::routes![index])
+        .mount("/", rocket::routes![get])
         .register("/", rocket::catchers![unauthorized])
 }

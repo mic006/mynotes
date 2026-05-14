@@ -10,6 +10,7 @@ repository = "https://github.com/mic006/mynotes"
 
 [dependencies]
 base64 = "0.22.1"
+pulldown-cmark = "0.13.3"
 rocket = { version = "0.5.1" }
 serde = { version = "1.0.228", features = ["derive"] }
 
