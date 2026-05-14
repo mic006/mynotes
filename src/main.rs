@@ -93,8 +93,8 @@ async fn get(
     if file.as_os_str().is_empty() {
         let mut root_node = index::Node::default();
         index::walk(
-            config.markdown_folder.clone(),
-            &config.markdown_folder,
+            config.content_path.clone(),
+            &config.content_path,
             &mut root_node,
         )
         .await;
@@ -106,7 +106,7 @@ async fn get(
         return Some(GetResponse::Html(RawHtml(html_output)));
     }
 
-    let mut path = config.markdown_folder.clone();
+    let mut path = config.content_path.clone();
     path.push(file);
 
     // If the file exists and is not markdown (e.g. an image), serve it directly.

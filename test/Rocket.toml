@@ -8,8 +8,8 @@ ident = false
 
 # MyNotes app config
 [default.app]
-# markdown content folder
-markdown_folder = "test/md"
+# path to root directory containing content (markdown + static files)
+content_path = "."
 
 [default.app.users]
 # authorized users: user name and password mapping
