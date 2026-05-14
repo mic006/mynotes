@@ -9,7 +9,7 @@ ident = false
 # MyNotes app config
 [default.app]
 # path to root directory containing content (markdown + static files)
-content_path = "."
+content_path = "content"
 # path to the HTML template file, relative to `content_path`
 template_path = "static/template.html"
 
