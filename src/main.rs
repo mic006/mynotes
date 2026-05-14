@@ -11,6 +11,9 @@ use std::path::PathBuf;
 
 use config::AppConfig;
 
+/// Pattern in template file, where content shall be inserted.
+const TEMPLATE_CONTENT_PATTERN: &str = "%CONTENT%";
+
 /// Markdown options used for all parsing operations.
 fn get_markdown_options() -> Options {
     Options::ENABLE_TABLES
@@ -98,11 +101,11 @@ async fn get(
             &mut root_node,
         )
         .await;
-        let mut html_output = String::from(
-            "<!DOCTYPE html><html><head><title>My Notes</title></head><body><h1>Notes Index</h1>",
-        );
-        root_node.render(&mut html_output);
-        html_output.push_str("</body></html>");
+        let mut body_content = String::from("<h1>Notes Index</h1>");
+        root_node.render(&mut body_content);
+        let html_output = config
+            .template_content
+            .replace(TEMPLATE_CONTENT_PATTERN, &body_content);
         return Some(GetResponse::Html(RawHtml(html_output)));
     }
 
@@ -125,8 +128,11 @@ async fn get(
     let content = rocket::tokio::fs::read_to_string(path).await.ok()?;
 
     let parser = Parser::new_ext(&content, get_markdown_options());
-    let mut html_output = String::new();
-    html::push_html(&mut html_output, parser);
+    let mut body_content = String::new();
+    html::push_html(&mut body_content, parser);
+    let html_output = config
+        .template_content
+        .replace(TEMPLATE_CONTENT_PATTERN, &body_content);
 
     Some(GetResponse::Html(RawHtml(html_output)))
 }
@@ -143,10 +149,13 @@ fn rocket() -> _ {
     let rocket = rocket::build();
 
     // Extract the custom "app" section from rocket.toml
-    let app_config: AppConfig = rocket
+    let mut app_config: AppConfig = rocket
         .figment()
         .extract_inner("app")
         .expect("Configuration 'app' section is missing in Rocket.toml");
+    app_config
+        .load_template()
+        .expect("Failed to load template file");
 
     rocket
         // Inject the loaded configuration into Rocket's state.

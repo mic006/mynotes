@@ -10,6 +10,8 @@ ident = false
 [default.app]
 # path to root directory containing content (markdown + static files)
 content_path = "."
+# path to the HTML template file, relative to `content_path`
+template_path = "static/template.html"
 
 [default.app.users]
 # authorized users: user name and password mapping
