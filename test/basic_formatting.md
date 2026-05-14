@@ -1,4 +1,4 @@
-# MyNotes - Basic Formatting Example
+# Basic Formatting Example
 
 This file demonstrates basic Markdown formatting.
 

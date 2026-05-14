@@ -65,7 +65,7 @@ impl<'r> Responder<'r, 'static> for BasicAuthPrompt {
         Response::build()
             // Returns a 401 Unauthorized with the proper header.
             .status(Status::Unauthorized)
-            .header(Header::new("WWW-Authenticate", "Basic realm=\"My Notes\""))
+            .header(Header::new("WWW-Authenticate", "Basic realm=\"MyNotes\""))
             .ok()
     }
 }

@@ -1,4 +1,4 @@
-# MyNotes - Code, Tables, and Task Lists Example
+# Code, Tables, and Task Lists Example
 
 This file demonstrates code snippets, tables, and task lists.
 

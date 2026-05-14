@@ -1,4 +1,4 @@
-# MyNotes - Lists and Links Example
+# Lists and Links Example
 
 This file showcases different types of lists and how to include links and images.
 
