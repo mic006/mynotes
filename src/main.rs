@@ -10,6 +10,7 @@ use rocket::fs::NamedFile;
 use rocket::http::{Header, Status};
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::{self, Responder, Response, content::RawHtml};
+use std::env;
 use std::path::PathBuf;
 
 use config::AppConfig;
@@ -142,6 +143,13 @@ fn unauthorized() -> BasicAuthPrompt {
 #[rocket::launch]
 /// Main entry point for the Rocket application.
 fn rocket() -> _ {
+    // Check for --version or -V argument
+    let args: Vec<String> = env::args().collect();
+    if args.iter().any(|arg| arg == "--version" || arg == "-V") {
+        println!("mynotes version {}", env!("BUILD_GIT_VERSION"));
+        std::process::exit(0);
+    }
+
     let rocket = rocket::build();
 
     // Extract the custom "app" section from rocket.toml
