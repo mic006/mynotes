@@ -1,8 +1,11 @@
+//! Self-hosted website to publish personal notes, in markdown format
+
 mod config;
 mod index;
+mod markdown;
+mod settings;
 
-use base64::{Engine as _, engine::general_purpose};
-use pulldown_cmark::{Options, Parser, html};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use rocket::fs::NamedFile;
 use rocket::http::{Header, Status};
 use rocket::request::{FromRequest, Outcome, Request};
@@ -11,16 +14,12 @@ use std::path::PathBuf;
 
 use config::AppConfig;
 
-/// Pattern in template file, where content shall be inserted.
-const TEMPLATE_CONTENT_PATTERN: &str = "%CONTENT%";
+use crate::markdown::MarkdownFile;
 
-/// Markdown options used for all parsing operations.
-fn get_markdown_options() -> Options {
-    Options::ENABLE_TABLES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_GFM
-}
+/// Pattern in template file, where title shall be inserted.
+const TEMPLATE_PATTERN_TITLE: &str = "%TITLE%";
+/// Pattern in template file, where content shall be inserted.
+const TEMPLATE_PATTERN_CONTENT: &str = "%CONTENT%";
 
 /// Request guard that ensures a user is authenticated via Basic Auth.
 struct AuthenticatedUser(String);
@@ -43,7 +42,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         if let Some(auth) = auth_header
             // Expecting "Basic <base64_encoded_credentials>"
             && let Some(encoded) = auth.strip_prefix("Basic ")
-            && let Ok(decoded_bytes) = general_purpose::STANDARD.decode(encoded)
+            && let Ok(decoded_bytes) = BASE64_STANDARD.decode(encoded)
             && let Ok(decoded) = String::from_utf8(decoded_bytes)
         {
             let parts: Vec<&str> = decoded.splitn(2, ':').collect();
@@ -99,13 +98,13 @@ async fn get(
             config.content_path.clone(),
             &config.content_path,
             &mut root_node,
-        )
-        .await;
+        );
         let mut body_content = String::from("<h1>Notes Index</h1>");
         root_node.render(&mut body_content);
         let html_output = config
             .template_content
-            .replace(TEMPLATE_CONTENT_PATTERN, &body_content);
+            .replace(TEMPLATE_PATTERN_TITLE, "MyNotes - Index")
+            .replace(TEMPLATE_PATTERN_CONTENT, &body_content);
         return Some(GetResponse::Html(RawHtml(html_output)));
     }
 
@@ -113,7 +112,7 @@ async fn get(
     path.push(file);
 
     // If the file exists and is not markdown (e.g. an image), serve it directly.
-    if let Ok(meta) = rocket::tokio::fs::metadata(&path).await {
+    if let Ok(meta) = std::fs::metadata(&path) {
         if meta.is_dir() {
             return None;
         }
@@ -125,14 +124,11 @@ async fn get(
         path.set_extension("md");
     }
 
-    let content = rocket::tokio::fs::read_to_string(path).await.ok()?;
-
-    let parser = Parser::new_ext(&content, get_markdown_options());
-    let mut body_content = String::new();
-    html::push_html(&mut body_content, parser);
+    let md_file = MarkdownFile::read(&path, true)?;
     let html_output = config
         .template_content
-        .replace(TEMPLATE_CONTENT_PATTERN, &body_content);
+        .replace(TEMPLATE_PATTERN_TITLE, &md_file.title)
+        .replace(TEMPLATE_PATTERN_CONTENT, &md_file.html.unwrap());
 
     Some(GetResponse::Html(RawHtml(html_output)))
 }

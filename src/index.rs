@@ -32,8 +32,8 @@ impl Node {
 }
 
 /// Extract the title from a markdown file's first line or use its filename.
-async fn get_title(path: &Path) -> String {
-    if let Ok(content) = rocket::tokio::fs::read_to_string(path).await
+fn get_title(path: &Path) -> String {
+    if let Ok(content) = std::fs::read_to_string(path)
         && let Some(line) = content.lines().next()
         && let Some(title) = line.trim().strip_prefix("# ")
     {
@@ -46,20 +46,20 @@ async fn get_title(path: &Path) -> String {
 }
 
 /// Recursively walk the directory to build a tree of markdown files.
-pub async fn walk(current_path: PathBuf, base_path: &Path, node: &mut Node) {
-    if let Ok(mut read_dir) = rocket::tokio::fs::read_dir(&current_path).await {
-        while let Ok(Some(entry)) = read_dir.next_entry().await {
+pub fn walk(current_path: PathBuf, base_path: &Path, node: &mut Node) {
+    if let Ok(read_dir) = std::fs::read_dir(&current_path) {
+        for entry in read_dir.flatten() {
             let path = entry.path();
             let name = entry.file_name().to_string_lossy().to_string();
-            if let Ok(ft) = entry.file_type().await {
+            if let Ok(ft) = entry.file_type() {
                 if ft.is_dir() {
                     let mut child_node = Node::default();
-                    Box::pin(walk(path, base_path, &mut child_node)).await;
+                    walk(path, base_path, &mut child_node);
                     if !child_node.children.is_empty() {
                         node.children.insert(name, child_node);
                     }
                 } else if path.extension().is_some_and(|ext| ext == "md") {
-                    let title = get_title(&path).await;
+                    let title = get_title(&path);
                     let rel_path = path
                         .strip_prefix(base_path)
                         .unwrap_or(&path)
