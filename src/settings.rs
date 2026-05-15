@@ -1,8 +1,8 @@
 use std::sync::LazyLock;
 
 use pulldown_cmark::Options;
-use regex::Regex;
-use time::{Date, format_description::well_known::Iso8601};
+use regex::{Captures, Regex};
+use time::{Date, OffsetDateTime, format_description::well_known::Iso8601};
 
 use crate::markdown::DueAction;
 
@@ -24,25 +24,43 @@ pub fn get_markdown_options() -> Options {
 
 /// Process markdown body
 ///
-/// - extract due actions
-/// - modify body for better rendering (if `will_render_html` is set)
-pub fn user_process_markdown(body: &mut String, _will_render_html: bool) -> Vec<DueAction> {
+/// - extract due actions + format due action date with CSS style
+/// - format money values
+pub fn user_process_markdown(body: &mut String, will_render_html: bool) -> Vec<DueAction> {
     static RE_DUE_ACTION: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?m)Next: (\d{4}-\d{2}-\d{2}) (.*)$").unwrap());
 
+    static RE_MONEY: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"\d+(?:\.\d{2})?\s?€").unwrap());
+
+    // extract due actions + format due action date with CSS style
+    let now = OffsetDateTime::now_utc().date();
     let mut due_actions = Vec::new();
-    for (_, [date, action]) in RE_DUE_ACTION.captures_iter(body).map(|c| c.extract()) {
-        due_actions.push(DueAction {
+    let body_modified = RE_DUE_ACTION.replace_all(body, |caps: &Captures<'_>| {
+        let (_, [date, action]) = caps.extract();
+        let due_action = DueAction {
             date: Date::parse(date, &Iso8601::DATE).unwrap(),
             action: action.to_string(),
+        };
+        let style = due_action.get_css_style(&now);
+        due_actions.push(due_action);
+        format!("Next: {} {action}", render_date(date, style))
+    });
+
+    // format money values
+    if will_render_html {
+        let body_modified = RE_MONEY.replace_all(&body_modified, |caps: &Captures<'_>| {
+            render_money(caps.get(0).unwrap().as_str())
         });
+        *body = body_modified.to_string();
     }
+
     due_actions
 }
 
 // Add span around date, with extra classes if provided
-pub fn render_date(d: &str, classes: &str) -> String {
-    format!(r#"<span class="mynotes-date {classes}">{d}</span>"#)
+pub fn render_date(d: &str, style: &str) -> String {
+    format!(r#"<span class="mynotes-date {style}">{d}</span>"#)
 }
 
 // Add span around money
@@ -62,14 +80,14 @@ impl DueAction {
             "{} {}",
             render_date(
                 &self.date.format(&Iso8601::DATE).ok()?,
-                self.get_css_class(now)
+                self.get_css_style(now)
             ),
             self.action
         ))
     }
 
     /// Get CSS class for this due action.
-    pub fn get_css_class(&self, now: &Date) -> &'static str {
+    pub fn get_css_style(&self, now: &Date) -> &'static str {
         let remaining_days = (self.date - *now).whole_days();
         if remaining_days >= DUE_ACTION_WARN_FUTURE_DAYS {
             "mynotes-date-ok"

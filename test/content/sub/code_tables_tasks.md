@@ -27,8 +27,8 @@ console.log(greet("World"));
 | Header 1     | Header 2 |      Header 3 |
 | :----------- | :------: | ------------: |
 | left aligned | centered | right aligned |
-| column       |   col    |        column |
-| !            |          |               |
+| column       |   col    |      123.11 € |
+| !            |          |        3.00 € |
 
 Next: 2026-05-10 Format table automatically
 

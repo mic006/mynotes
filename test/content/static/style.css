@@ -169,11 +169,11 @@ input[type="checkbox"]:checked::before {
     color: var(--link-color);
 }
 
-span.mynotes-date {
+.mynotes-date {
     font-family: var(--font-family-monospace);
 }
 
-span.mynotes-date::before {
+.mynotes-date::before {
     font-family: var(--font-family-awesome);
     /* fa-calendar */
     font-weight: 900;
@@ -191,4 +191,8 @@ span.mynotes-date::before {
 
 .mynotes-date-alert {
     color: #d32f2f;
+}
+
+.mynotes-money {
+    font-family: var(--font-family-monospace);
 }
