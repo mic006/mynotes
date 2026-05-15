@@ -6,6 +6,13 @@ use time::{Date, format_description::well_known::Iso8601};
 
 use crate::markdown::DueAction;
 
+/// Ignore due actions when they are too far in the future
+const DUE_ACTION_IGNORE_FUTURE_DAYS: i64 = 60;
+/// Warn for due actions in a near future
+const DUE_ACTION_WARN_FUTURE_DAYS: i64 = 30;
+/// Alert for due actions near or past the deadline
+const DUE_ACTION_ALERT_FUTURE_DAYS: i64 = 0;
+
 /// Markdown options used to transform markdown to HTML.
 /// See <https://docs.rs/pulldown-cmark/latest/pulldown_cmark/struct.Options.html>
 pub fn get_markdown_options() -> Options {
@@ -31,6 +38,47 @@ pub fn user_process_markdown(body: &mut String, _will_render_html: bool) -> Vec<
         });
     }
     due_actions
+}
+
+// Add span around date, with extra classes if provided
+pub fn render_date(d: &str, classes: &str) -> String {
+    format!(r#"<span class="mynotes-date {classes}">{d}</span>"#)
+}
+
+// Add span around money
+pub fn render_money(s: &str) -> String {
+    format!(r#"<span class="mynotes-money">{s}</span>"#)
+}
+
+impl DueAction {
+    /// Whether this due action shall be rendered in the index page.
+    pub fn render_in_index(&self, now: &Date) -> Option<String> {
+        let remaining_days = (self.date - *now).whole_days();
+        if remaining_days >= DUE_ACTION_IGNORE_FUTURE_DAYS {
+            // action is too far in the future, ignore it
+            return None;
+        }
+        Some(format!(
+            "{} {}",
+            render_date(
+                &self.date.format(&Iso8601::DATE).ok()?,
+                self.get_css_class(now)
+            ),
+            self.action
+        ))
+    }
+
+    /// Get CSS class for this due action.
+    pub fn get_css_class(&self, now: &Date) -> &'static str {
+        let remaining_days = (self.date - *now).whole_days();
+        if remaining_days >= DUE_ACTION_WARN_FUTURE_DAYS {
+            "mynotes-date-ok"
+        } else if remaining_days >= DUE_ACTION_ALERT_FUTURE_DAYS {
+            "mynotes-date-warn"
+        } else {
+            "mynotes-date-alert"
+        }
+    }
 }
 
 #[cfg(test)]

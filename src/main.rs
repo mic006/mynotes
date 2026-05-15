@@ -93,13 +93,13 @@ async fn get(
 ) -> Option<GetResponse> {
     // Specific handling for the main page (empty path).
     if file.as_os_str().is_empty() {
-        let mut root_node = index::Node::default();
+        let mut root_node = index::Dir::default();
         index::walk(
             config.content_path.clone(),
             &config.content_path,
             &mut root_node,
         );
-        let mut body_content = String::from("<h1>Notes Index</h1>");
+        let mut body_content = String::new();
         root_node.render(&mut body_content);
         let html_output = config
             .template_content

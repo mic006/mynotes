@@ -30,6 +30,8 @@ console.log(greet("World"));
 | column       |   col    |        column |
 | !            |          |               |
 
+Next: 2026-05-10 Format table automatically
+
 ## Task Lists
 
 - [x] Completed task
