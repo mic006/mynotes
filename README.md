@@ -16,8 +16,9 @@ Retained solution:
 - use dedicated (private) port for personal server
 
 ```sh
-certbot certonly --logs-dir /run/log/letsencrypt --preferred-profile shortlived --ip-address <ip>
+certbot certonly --logs-dir /tmp/letsencrypt --preferred-profile shortlived --ip-address <ip>
 ```
 
 Enable `certbot` renewal (`certbot-renew.timer`) to renew the certificate automatically (it is only valid for 6 days).
-Configure a deploy hook in /etc/letsencrypt/renewal-hooks/deploy/ to restart the web server when the certificate is updated.
+
+Configure a deploy hook in `/etc/letsencrypt/renewal-hooks/deploy/` to restart the web server when the certificate is updated.
