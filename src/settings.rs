@@ -30,9 +30,6 @@ pub fn user_process_markdown(body: &mut String, will_render_html: bool) -> Vec<D
     static RE_DUE_ACTION: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?m)Next: (\d{4}-\d{2}-\d{2}) (.*)$").unwrap());
 
-    static RE_MONEY: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"\d+(?:\.\d{2})?\s?€").unwrap());
-
     // extract due actions + format due action date with CSS style
     let now = OffsetDateTime::now_utc().date();
     let mut due_actions = Vec::new();
@@ -49,8 +46,11 @@ pub fn user_process_markdown(body: &mut String, will_render_html: bool) -> Vec<D
 
     // format money values
     if will_render_html {
+        static RE_MONEY: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"(-?\d+(?:\.\d{2})?)€").unwrap());
+
         let body_modified = RE_MONEY.replace_all(&body_modified, |caps: &Captures<'_>| {
-            render_money(caps.get(0).unwrap().as_str())
+            render_money(caps.get(1).unwrap().as_str())
         });
         *body = body_modified.to_string();
     }
@@ -65,7 +65,7 @@ pub fn render_date(d: &str, style: &str) -> String {
 
 // Add span around money
 pub fn render_money(s: &str) -> String {
-    format!(r#"<span class="mynotes-money">{s}</span>"#)
+    format!(r#"<span class="mynotes-money">{s} €</span>"#)
 }
 
 impl DueAction {
