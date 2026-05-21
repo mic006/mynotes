@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use time::{Date, OffsetDateTime};
 
+use crate::config::AppConfig;
 use crate::markdown::{DueAction, MarkdownFile};
 
 /// A node in the directory tree for the index page.
@@ -32,7 +33,7 @@ struct DueActionItem<'a> {
 
 impl Dir {
     /// Render the index page body
-    pub fn render(&self, html: &mut String) {
+    pub fn render(&self, html: &mut String, cfg: &AppConfig) {
         if self.children.is_empty() {
             html.push_str("<h2>No content</h2>");
             return;
@@ -41,7 +42,7 @@ impl Dir {
         // collect all due actions
         let now = OffsetDateTime::now_utc().date();
         let mut due_actions = Vec::new();
-        self.get_due_actions_recursive(&mut due_actions, &now);
+        self.get_due_actions_recursive(&mut due_actions, &now, cfg);
         if !due_actions.is_empty() {
             // sort by ascending due date
             due_actions.sort_by_key(|due_action| due_action.due_action.date);
@@ -91,13 +92,14 @@ impl Dir {
         &'a self,
         due_actions: &mut Vec<DueActionItem<'a>>,
         now: &Date,
+        cfg: &AppConfig,
     ) {
         for node in self.children.values() {
             match node {
-                Node::Dir(dir) => dir.get_due_actions_recursive(due_actions, now),
+                Node::Dir(dir) => dir.get_due_actions_recursive(due_actions, now, cfg),
                 Node::File(md_file) => {
                     for due_action in &md_file.file.due_actions {
-                        if let Some(html) = due_action.render_in_index(now) {
+                        if let Some(html) = due_action.render_in_index(now, &cfg.due_action) {
                             due_actions.push(DueActionItem {
                                 md_file,
                                 due_action,
@@ -112,7 +114,7 @@ impl Dir {
 }
 
 /// Recursively walk the directory to build a tree of markdown files.
-pub fn walk(current_path: PathBuf, base_path: &Path, dir: &mut Dir) {
+pub fn walk(current_path: PathBuf, base_path: &Path, dir: &mut Dir, cfg: &AppConfig) {
     if let Ok(read_dir) = std::fs::read_dir(&current_path) {
         for entry in read_dir.flatten() {
             let path = entry.path();
@@ -120,12 +122,12 @@ pub fn walk(current_path: PathBuf, base_path: &Path, dir: &mut Dir) {
             if let Ok(ft) = entry.file_type() {
                 if ft.is_dir() {
                     let mut child_dir = Dir::default();
-                    walk(path, base_path, &mut child_dir);
+                    walk(path, base_path, &mut child_dir, cfg);
                     if !child_dir.children.is_empty() {
                         dir.children.insert(name, Node::Dir(child_dir));
                     }
                 } else if path.extension().is_some_and(|ext| ext == "md")
-                    && let Some(md) = MarkdownFile::read(&path, false)
+                    && let Some(md) = MarkdownFile::read(&path, false, cfg)
                 {
                     let rel_path = path
                         .strip_prefix(base_path)

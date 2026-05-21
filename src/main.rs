@@ -99,9 +99,10 @@ async fn get(
             config.content_path.clone(),
             &config.content_path,
             &mut root_node,
+            config,
         );
         let mut body_content = String::new();
-        root_node.render(&mut body_content);
+        root_node.render(&mut body_content, config);
         let html_output = config
             .template_content
             .replace(TEMPLATE_PATTERN_TITLE, "MyNotes - Index")
@@ -125,7 +126,7 @@ async fn get(
         path.set_extension("md");
     }
 
-    let md_file = MarkdownFile::read(&path, true)?;
+    let md_file = MarkdownFile::read(&path, true, config)?;
     let html_output = config
         .template_content
         .replace(TEMPLATE_PATTERN_TITLE, &md_file.title)

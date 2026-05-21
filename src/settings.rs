@@ -4,14 +4,8 @@ use pulldown_cmark::Options;
 use regex::{Captures, Regex};
 use time::{Date, OffsetDateTime, format_description::well_known::Iso8601};
 
+use crate::config::{AppConfig, AppConfigDueAction};
 use crate::markdown::DueAction;
-
-/// Ignore due actions when they are too far in the future
-const DUE_ACTION_IGNORE_FUTURE_DAYS: i64 = 60;
-/// Warn for due actions in a near future
-const DUE_ACTION_WARN_FUTURE_DAYS: i64 = 30;
-/// Alert for due actions near or past the deadline
-const DUE_ACTION_ALERT_FUTURE_DAYS: i64 = 0;
 
 /// Markdown options used to transform markdown to HTML.
 /// See <https://docs.rs/pulldown-cmark/latest/pulldown_cmark/struct.Options.html>
@@ -26,7 +20,11 @@ pub fn get_markdown_options() -> Options {
 ///
 /// - extract due actions + format due action date with CSS style
 /// - format money values
-pub fn user_process_markdown(body: &mut String, will_render_html: bool) -> Vec<DueAction> {
+pub fn user_process_markdown(
+    body: &mut String,
+    will_render_html: bool,
+    cfg: &AppConfig,
+) -> Vec<DueAction> {
     static RE_DUE_ACTION: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?m)Next: (\d{4}-\d{2}-\d{2}) (.*)$").unwrap());
 
@@ -39,7 +37,7 @@ pub fn user_process_markdown(body: &mut String, will_render_html: bool) -> Vec<D
             date: Date::parse(date, &Iso8601::DATE).unwrap(),
             action: action.to_string(),
         };
-        let style = due_action.get_css_style(&now);
+        let style = due_action.get_css_style(&now, &cfg.due_action);
         due_actions.push(due_action);
         format!("Next: {} {action}", render_date(date, style))
     });
@@ -70,9 +68,9 @@ pub fn render_money(s: &str) -> String {
 
 impl DueAction {
     /// Whether this due action shall be rendered in the index page.
-    pub fn render_in_index(&self, now: &Date) -> Option<String> {
+    pub fn render_in_index(&self, now: &Date, cfg: &AppConfigDueAction) -> Option<String> {
         let remaining_days = (self.date - *now).whole_days();
-        if remaining_days >= DUE_ACTION_IGNORE_FUTURE_DAYS {
+        if remaining_days >= cfg.ignore_future_days {
             // action is too far in the future, ignore it
             return None;
         }
@@ -80,18 +78,18 @@ impl DueAction {
             "{} {}",
             render_date(
                 &self.date.format(&Iso8601::DATE).ok()?,
-                self.get_css_style(now)
+                self.get_css_style(now, cfg)
             ),
             self.action
         ))
     }
 
     /// Get CSS class for this due action.
-    pub fn get_css_style(&self, now: &Date) -> &'static str {
+    pub fn get_css_style(&self, now: &Date, cfg: &AppConfigDueAction) -> &'static str {
         let remaining_days = (self.date - *now).whole_days();
-        if remaining_days >= DUE_ACTION_WARN_FUTURE_DAYS {
+        if remaining_days >= cfg.warn_future_days {
             "mynotes-date-ok"
-        } else if remaining_days >= DUE_ACTION_ALERT_FUTURE_DAYS {
+        } else if remaining_days >= cfg.alert_future_days {
             "mynotes-date-warn"
         } else {
             "mynotes-date-alert"
@@ -112,7 +110,7 @@ mod tests {
             - Next: 2024-05-21 Call the bank",
         );
 
-        let actions = user_process_markdown(&mut body, false);
+        let actions = user_process_markdown(&mut body, false, &AppConfig::default());
 
         assert_eq!(actions.len(), 2);
         assert_eq!(
@@ -130,7 +128,7 @@ mod tests {
     #[test]
     fn test_user_process_markdown_no_matches() {
         let mut body = String::from("This is a simple note without any due actions.");
-        let actions = user_process_markdown(&mut body, false);
+        let actions = user_process_markdown(&mut body, false, &AppConfig::default());
         assert!(actions.is_empty());
     }
 }

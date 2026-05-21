@@ -5,6 +5,7 @@ use pulldown_cmark::Parser;
 use regex::Regex;
 use time::Date;
 
+use crate::config::AppConfig;
 use crate::settings;
 
 /// Action to perform on a due date.
@@ -21,12 +22,12 @@ pub struct MarkdownFile {
 }
 
 impl MarkdownFile {
-    pub fn read(path: &Path, with_html: bool) -> Option<Self> {
+    pub fn read(path: &Path, with_html: bool, cfg: &AppConfig) -> Option<Self> {
         let content = std::fs::read_to_string(path).ok()?;
 
         let (title, body) = Self::extract_title(&content)?;
         let mut body = body.to_string();
-        let due_actions = settings::user_process_markdown(&mut body, with_html);
+        let due_actions = settings::user_process_markdown(&mut body, with_html, cfg);
 
         let html = if with_html {
             let parser = Parser::new_ext(&body, settings::get_markdown_options());
