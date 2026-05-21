@@ -16,6 +16,7 @@ use rocket::fs::NamedFile;
 use rocket::http::{Header, Status};
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::{self, Responder, Response, content::RawHtml};
+use rocket_async_compression::Compression;
 
 use config::AppConfig;
 
@@ -221,6 +222,7 @@ fn rocket() -> _ {
     rocket
         // Inject the loaded configuration into Rocket's state.
         .manage(app_config)
+        .attach(Compression::fairing())
         .mount("/", rocket::routes![get])
         .register("/", rocket::catchers![unauthorized])
 }
