@@ -5,13 +5,17 @@ mod index;
 mod markdown;
 mod settings;
 
+use std::env;
+use std::path::PathBuf;
+use std::sync::LazyLock;
+use std::time::SystemTime;
+
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
+use regex::{Captures, Regex};
 use rocket::fs::NamedFile;
 use rocket::http::{Header, Status};
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::{self, Responder, Response, content::RawHtml};
-use std::env;
-use std::path::PathBuf;
 
 use config::AppConfig;
 
@@ -74,19 +78,72 @@ impl<'r> Responder<'r, 'static> for BasicAuthPrompt {
 }
 
 /// A custom responder to handle either generated HTML content or static files.
-#[derive(rocket::Responder)]
 enum GetResponse {
     /// Generated HTML content
     Html(RawHtml<String>),
     /// Static file
     File(NamedFile),
 }
+impl GetResponse {
+    /// Build HTML from template
+    fn build_html(config: &AppConfig, title: &str, body: &str) -> Self {
+        static RE_STATIC_RESOURCE: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r#"(<src|href)="([^"]*)""#).unwrap());
 
-#[rocket::get("/<file..>")]
+        let html_output = config
+            .template_content
+            .replace(TEMPLATE_PATTERN_TITLE, title)
+            .replace(TEMPLATE_PATTERN_CONTENT, body);
+
+        // Cache busting: add "?mtime=<mtime>" to local static resources to allow efficient cache
+        // => each resource is considered immutable and can be cached forever
+        // => on a resource change, mtime is different, so URL is different and resource is retrieved
+        let html_output = RE_STATIC_RESOURCE.replace_all(&html_output, |caps: &Captures<'_>| {
+            let (unchanged, [attr, path]) = caps.extract();
+            if !path.contains("://") && !path.contains("/.") {
+                // check if file exists
+                // TODO use trim_prefix once available
+                let full_path = config.content_path.join(path.trim_start_matches('/'));
+                if let Ok(meta) = std::fs::metadata(full_path) {
+                    let mtime = meta
+                        .modified()
+                        .unwrap()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
+                    return format!(r#"{attr}="{path}?mtime={mtime}""#);
+                }
+            }
+            unchanged.to_string()
+        });
+
+        GetResponse::Html(RawHtml(html_output.to_string()))
+    }
+}
+
+// add cache control header
+impl<'r> Responder<'r, 'static> for GetResponse {
+    fn respond_to(self, req: &'r Request<'_>) -> response::Result<'static> {
+        match self {
+            GetResponse::Html(html) => Response::build_from(html.respond_to(req)?)
+                .header(Header::new("Cache-Control", "private, no-cache"))
+                .ok(),
+            // static files are immutable thanks to cache busting done by `build_html`
+            GetResponse::File(file) => Response::build_from(file.respond_to(req)?)
+                .header(Header::new(
+                    "Cache-Control",
+                    "private, max-age=31536000, immutable",
+                ))
+                .ok(),
+        }
+    }
+}
+
 /// Serves content to authenticated users.
 ///
 /// - static files are served as is
 /// - markdown files are converted to HTML
+#[rocket::get("/<file..>")]
 async fn get(
     file: PathBuf,
     _user: AuthenticatedUser,
@@ -103,11 +160,11 @@ async fn get(
         );
         let mut body_content = String::new();
         root_node.render(&mut body_content, config);
-        let html_output = config
-            .template_content
-            .replace(TEMPLATE_PATTERN_TITLE, "MyNotes - Index")
-            .replace(TEMPLATE_PATTERN_CONTENT, &body_content);
-        return Some(GetResponse::Html(RawHtml(html_output)));
+        return Some(GetResponse::build_html(
+            config,
+            "MyNotes - Index",
+            &body_content,
+        ));
     }
 
     let mut path = config.content_path.clone();
@@ -127,12 +184,11 @@ async fn get(
     }
 
     let md_file = MarkdownFile::read(&path, true, config)?;
-    let html_output = config
-        .template_content
-        .replace(TEMPLATE_PATTERN_TITLE, &md_file.title)
-        .replace(TEMPLATE_PATTERN_CONTENT, &md_file.html.unwrap());
-
-    Some(GetResponse::Html(RawHtml(html_output)))
+    Some(GetResponse::build_html(
+        config,
+        &md_file.title,
+        &md_file.html.unwrap(),
+    ))
 }
 
 #[rocket::catch(401)]
