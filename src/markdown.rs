@@ -7,6 +7,9 @@ use time::Date;
 use crate::config::AppConfig;
 use crate::settings;
 
+pub static RE_TODO_ITEM: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)^(\s*)-\s*\[([ x])\]\s*(.*)$").unwrap());
+
 /// Action to perform on a due date.
 pub struct DueAction {
     pub date: Date,
@@ -66,15 +69,12 @@ impl MarkdownFile {
      * - add data-* attributes to allow user check and server update
      */
     fn patch_md_todo_items(md_content: &mut String, rel_path: &str) {
-        static RE_TODO_ITEM: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"(?m)^(\s*)-\s*\[([ x])\]\s*(.*)$").unwrap());
-
         *md_content = RE_TODO_ITEM
             .replace_all(md_content, |caps: &regex::Captures<'_>| {
                 let (_, [indent, checked, text]) = caps.extract();
                 let checked = checked == "x";
                 format!(
-                    r#"{indent}- <label><input type="checkbox"{} data-path="{rel_path}" data-label="{text}"> {text}</label>"#,
+                    r#"{indent}- <label><input type="checkbox"{} data-url="/{rel_path}" data-label="{text}"> {text}</label>"#,
                     if checked { " checked" } else { "" }
                 )
             })
@@ -129,18 +129,18 @@ mod tests {
     #[test]
     fn test_patch_md_todo_items() {
         let mut content = String::from(
-            "- [ ] Unchecked\n\
-             - [x] Checked\n\
-               - [ ] Indented\n\
-             Not a todo item",
+            r"- [ ] Unchecked
+- [x] Checked
+  - [ ] Indented
+Not a todo item",
         );
         let rel_path = "test.md";
         MarkdownFile::patch_md_todo_items(&mut content, rel_path);
 
-        let expected = "- <label><input type=\"checkbox\" data-path=\"test.md\" data-label=\"Unchecked\"> Unchecked</label>\n\
-                        - <label><input type=\"checkbox\" checked data-path=\"test.md\" data-label=\"Checked\"> Checked</label>\n\
-                          - <label><input type=\"checkbox\" data-path=\"test.md\" data-label=\"Indented\"> Indented</label>\n\
-                        Not a todo item";
+        let expected = r#"- <label><input type="checkbox" data-url="/test.md" data-label="Unchecked"> Unchecked</label>
+- <label><input type="checkbox" checked data-url="/test.md" data-label="Checked"> Checked</label>
+  - <label><input type="checkbox" data-url="/test.md" data-label="Indented"> Indented</label>
+Not a todo item"#;
         assert_eq!(content, expected);
     }
 }

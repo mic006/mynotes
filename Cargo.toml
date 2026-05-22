@@ -16,7 +16,7 @@ regex = { version = "1.12.3", default-features = false, features = [
     "perf",
     "unicode-perl",
 ] }
-rocket = { version = "0.5.1", features = ["tls"] }
+rocket = { version = "0.5.1", features = ["json", "tls"] }
 rocket_async_compression = "0.6.1"
 serde = { version = "1.0.228", features = ["derive"] }
 time = "0.3.47"

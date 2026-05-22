@@ -16,11 +16,13 @@ use rocket::fs::NamedFile;
 use rocket::http::{Header, Status};
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::{self, Responder, Response, content::RawHtml};
+use rocket::serde::json::Json;
 use rocket_async_compression::Compression;
+use serde::Deserialize;
 
 use config::AppConfig;
 
-use crate::markdown::MarkdownFile;
+use crate::markdown::{MarkdownFile, RE_TODO_ITEM};
 
 /// Pattern in template file, where title shall be inserted.
 const TEMPLATE_PATTERN_TITLE: &str = "%TITLE%";
@@ -173,16 +175,12 @@ async fn get(
     path.push(&file);
 
     // If the file exists and is not markdown (e.g. an image), serve it directly.
-    if let Ok(meta) = std::fs::metadata(&path) {
-        if meta.is_dir() {
-            return None;
-        }
-        if path.extension().is_none_or(|ext| ext != "md") {
-            return NamedFile::open(path).await.ok().map(GetResponse::File);
-        }
-    } else if path.extension().is_none() {
-        // If the file doesn't exist and has no extension, try appending .md.
-        path.set_extension("md");
+    let meta = std::fs::metadata(&path).ok()?;
+    if meta.is_dir() {
+        return None;
+    }
+    if path.extension().is_none_or(|ext| ext != "md") {
+        return NamedFile::open(path).await.ok().map(GetResponse::File);
     }
 
     let md_file = MarkdownFile::read(&file.to_string_lossy(), true, config)?;
@@ -191,6 +189,58 @@ async fn get(
         &md_file.title,
         &md_file.html.unwrap(),
     ))
+}
+
+/// Structure for checkbox update payload.
+#[derive(Deserialize)]
+struct CheckboxUpdate {
+    state: bool,
+    label: String,
+}
+
+/// Handles POST requests to update checkbox states.
+#[rocket::post("/<file..>", data = "<update>")]
+fn post(
+    file: PathBuf,
+    update: Json<CheckboxUpdate>,
+    _user: AuthenticatedUser,
+    config: &rocket::State<AppConfig>,
+) -> Result<Status, Status> {
+    let full_path = config.content_path.join(&file);
+
+    let content = std::fs::read_to_string(&full_path).map_err(|e| {
+        rocket::warn!("Error reading file {}: {}", full_path.display(), e);
+        Status::NotFound
+    })?;
+
+    let mut found_and_updated = false;
+    let new_content = RE_TODO_ITEM.replace_all(&content, |caps: &regex::Captures<'_>| {
+        let (_, [indent, _checked, text]) = caps.extract();
+        if text == update.label {
+            found_and_updated = true;
+            let new_checked_char = if update.state { 'x' } else { ' ' };
+            format!("{indent}- [{new_checked_char}] {text}")
+        } else {
+            // Return the original matched string if it's not the target label
+            caps.get(0).unwrap().as_str().to_string()
+        }
+    });
+
+    if !found_and_updated {
+        rocket::warn!(
+            "Todo item with label '{}' not found in file {}",
+            update.label,
+            full_path.display()
+        );
+        return Err(Status::NotFound);
+    }
+
+    std::fs::write(&full_path, new_content.as_bytes()).map_err(|e| {
+        rocket::warn!("Error writing file {}: {}", full_path.display(), e);
+        Status::InternalServerError
+    })?;
+
+    Ok(Status::Ok)
 }
 
 #[rocket::catch(401)]
@@ -224,6 +274,6 @@ fn rocket() -> _ {
         // Inject the loaded configuration into Rocket's state.
         .manage(app_config)
         .attach(Compression::fairing())
-        .mount("/", rocket::routes![get])
+        .mount("/", rocket::routes![get, post])
         .register("/", rocket::catchers![unauthorized])
 }
