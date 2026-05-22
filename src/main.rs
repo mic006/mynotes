@@ -88,8 +88,9 @@ enum GetResponse {
 impl GetResponse {
     /// Build HTML from template
     fn build_html(config: &AppConfig, title: &str, body: &str) -> Self {
-        static RE_STATIC_RESOURCE: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r#"(src|href)="([^"]*)""#).unwrap());
+        static RE_STATIC_RESOURCE: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"(<(?:link|script|img) [^<>]*(?:src|href))="([^"]*)""#).unwrap()
+        });
 
         let html_output = config
             .template_content
