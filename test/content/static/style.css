@@ -148,27 +148,6 @@ th {
     font-weight: 600;
 }
 
-input[type="checkbox"] {
-    /* remove native checkbox */
-    appearance: none;
-    cursor: default;
-}
-
-/* use awesome font rendering instead to hide disabled state */
-input[type="checkbox"]::before {
-    font-family: var(--font-family-awesome);
-    /* fa-square */
-    font-weight: 400;
-    content: "\f0c8";
-}
-
-input[type="checkbox"]:checked::before {
-    /* fa-square-check, solid */
-    font-weight: 900;
-    content: "\f14a";
-    color: var(--link-color);
-}
-
 .mynotes-date {
     font-family: var(--font-family-monospace);
 }

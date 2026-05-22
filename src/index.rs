@@ -126,21 +126,21 @@ pub fn walk(current_path: PathBuf, base_path: &Path, dir: &mut Dir, cfg: &AppCon
                     if !child_dir.children.is_empty() {
                         dir.children.insert(name, Node::Dir(child_dir));
                     }
-                } else if path.extension().is_some_and(|ext| ext == "md")
-                    && let Some(md) = MarkdownFile::read(&path, false, cfg)
-                {
+                } else if path.extension().is_some_and(|ext| ext == "md") {
                     let rel_path = path
                         .strip_prefix(base_path)
                         .unwrap_or(&path)
                         .to_string_lossy()
                         .replace('\\', "/");
-                    dir.children.insert(
-                        name,
-                        Node::File(MdFile {
-                            file: md,
-                            href: rel_path,
-                        }),
-                    );
+                    if let Some(md) = MarkdownFile::read(&rel_path, false, cfg) {
+                        dir.children.insert(
+                            name,
+                            Node::File(MdFile {
+                                file: md,
+                                href: rel_path,
+                            }),
+                        );
+                    }
                 }
             }
         }

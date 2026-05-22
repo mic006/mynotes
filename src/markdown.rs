@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::LazyLock;
 
 use pulldown_cmark::Parser;
@@ -22,7 +21,8 @@ pub struct MarkdownFile {
 }
 
 impl MarkdownFile {
-    pub fn read(path: &Path, with_html: bool, cfg: &AppConfig) -> Option<Self> {
+    pub fn read(rel_path: &str, with_html: bool, cfg: &AppConfig) -> Option<Self> {
+        let path = cfg.content_path.join(rel_path);
         let content = std::fs::read_to_string(path).ok()?;
 
         let (title, body) = Self::extract_title(&content)?;
@@ -30,6 +30,7 @@ impl MarkdownFile {
         let due_actions = settings::user_process_markdown(&mut body, with_html, cfg);
 
         let html = if with_html {
+            Self::pre_render_md_patch(&mut body, rel_path);
             let parser = Parser::new_ext(&body, settings::get_markdown_options());
             let mut html = String::new();
             pulldown_cmark::html::push_html(&mut html, parser);
@@ -49,6 +50,35 @@ impl MarkdownFile {
             LazyLock::new(|| Regex::new(r"(?s)^# ([^\n]*)\n\n(.*)$").unwrap());
         let (_, [title, body]) = RE_TITLE.captures(content)?.extract();
         Some((title, body))
+    }
+
+    /// Patch Markdown content before rendering to HTML
+    fn pre_render_md_patch(md_content: &mut String, rel_path: &str) {
+        Self::patch_md_todo_items(md_content, rel_path);
+    }
+
+    /** MD patch: handle TODO items
+     *
+     * pulldown-cmark can render TODO items, but there is no flexibility.
+     *
+     * Wanted behavior:
+     * - put input inside a label element to be cleaner
+     * - add data-* attributes to allow user check and server update
+     */
+    fn patch_md_todo_items(md_content: &mut String, rel_path: &str) {
+        static RE_TODO_ITEM: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new(r"(?m)^(\s*)-\s*\[([ x])\]\s*(.*)$").unwrap());
+
+        *md_content = RE_TODO_ITEM
+            .replace_all(md_content, |caps: &regex::Captures<'_>| {
+                let (_, [indent, checked, text]) = caps.extract();
+                let checked = checked == "x";
+                format!(
+                    r#"{indent}- <label><input type="checkbox"{} data-path="{rel_path}" data-label="{text}"> {text}</label>"#,
+                    if checked { " checked" } else { "" }
+                )
+            })
+            .to_string();
     }
 }
 
@@ -94,5 +124,23 @@ mod tests {
         let (title, body) = MarkdownFile::extract_title(content).expect("Should parse");
         assert_eq!(title, "Title");
         assert_eq!(body, "Line 1\nLine 2\nLine 3");
+    }
+
+    #[test]
+    fn test_patch_md_todo_items() {
+        let mut content = String::from(
+            "- [ ] Unchecked\n\
+             - [x] Checked\n\
+               - [ ] Indented\n\
+             Not a todo item",
+        );
+        let rel_path = "test.md";
+        MarkdownFile::patch_md_todo_items(&mut content, rel_path);
+
+        let expected = "- <label><input type=\"checkbox\" data-path=\"test.md\" data-label=\"Unchecked\"> Unchecked</label>\n\
+                        - <label><input type=\"checkbox\" checked data-path=\"test.md\" data-label=\"Checked\"> Checked</label>\n\
+                          - <label><input type=\"checkbox\" data-path=\"test.md\" data-label=\"Indented\"> Indented</label>\n\
+                        Not a todo item";
+        assert_eq!(content, expected);
     }
 }

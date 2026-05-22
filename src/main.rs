@@ -89,7 +89,7 @@ impl GetResponse {
     /// Build HTML from template
     fn build_html(config: &AppConfig, title: &str, body: &str) -> Self {
         static RE_STATIC_RESOURCE: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r#"(<src|href)="([^"]*)""#).unwrap());
+            LazyLock::new(|| Regex::new(r#"(src|href)="([^"]*)""#).unwrap());
 
         let html_output = config
             .template_content
@@ -169,7 +169,7 @@ async fn get(
     }
 
     let mut path = config.content_path.clone();
-    path.push(file);
+    path.push(&file);
 
     // If the file exists and is not markdown (e.g. an image), serve it directly.
     if let Ok(meta) = std::fs::metadata(&path) {
@@ -184,7 +184,7 @@ async fn get(
         path.set_extension("md");
     }
 
-    let md_file = MarkdownFile::read(&path, true, config)?;
+    let md_file = MarkdownFile::read(&file.to_string_lossy(), true, config)?;
     Some(GetResponse::build_html(
         config,
         &md_file.title,
