@@ -81,14 +81,22 @@ impl MdTree {
         None
     }
 
-    /// Process all Markdown files, in tree order
-    pub fn process_all_md_files<F>(&mut self, mut md_file_handler: F)
-    where
-        F: FnMut(&MdFile),
-    {
+    /// Returns an iterator over all Markdown files in the tree.
+    pub fn md_files_iter(&mut self) -> impl Iterator<Item = &MdFile> {
         self.refresh();
-        self.root
-            .process_all_md_files_recursive(&mut md_file_handler);
+        let mut stack = vec![self.root.children.values()];
+        std::iter::from_fn(move || {
+            while let Some(top_iter) = stack.last_mut() {
+                match top_iter.next() {
+                    Some(Node::File(file)) => return Some(file),
+                    Some(Node::Dir(dir)) => stack.push(dir.children.values()),
+                    None => {
+                        stack.pop();
+                    }
+                }
+            }
+            None
+        })
     }
 }
 
@@ -153,18 +161,6 @@ impl Dir {
             true
         });
     }
-
-    fn process_all_md_files_recursive<F>(&self, handler: &mut F)
-    where
-        F: FnMut(&MdFile),
-    {
-        for node in self.children.values() {
-            match node {
-                Node::Dir(dir) => dir.process_all_md_files_recursive(handler),
-                Node::File(file) => handler(file),
-            }
-        }
-    }
 }
 
 /// A node in the directory tree for the index page.
@@ -179,7 +175,7 @@ pub struct MdFile {
     mtime: SystemTime,
     /// relative path, used for href link
     pub href: String,
-    /// Markdown title
+    /// Markdown title, including parent path (parent/title)
     pub title: String,
     /// Due actions in the file
     pub due_actions: Vec<DueAction>,
@@ -196,10 +192,17 @@ impl MdFile {
         let (title, body) = Self::split_title_body(&content)?;
         let due_actions = Self::get_due_actions(body);
 
+        let parent = Path::new(&rel_path).parent().unwrap_or(Path::new(""));
+        let title = if parent.as_os_str().is_empty() {
+            title.to_string()
+        } else {
+            format!("{}/{title}", parent.display())
+        };
+
         Some(Self {
             mtime: std::fs::metadata(&path).ok()?.modified().ok()?,
             href: rel_path.to_string(),
-            title: title.to_string(),
+            title,
             due_actions,
             raw_md_body: body.to_string(),
         })

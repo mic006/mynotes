@@ -30,7 +30,7 @@ console.log(greet("World"));
 | column       |   col    |      123.11 € |
 | !            |          |        3.00 € |
 
-Next: 2026-05-10 Format table automatically
+- [ ] 2026-05-10 Format table automatically
 
 ## Task Lists
 

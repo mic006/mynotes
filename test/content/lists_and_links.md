@@ -2,7 +2,7 @@
 
 This file showcases different types of lists and how to include links and images.
 
-Next: 2026-06-06 Publish the crate
+- [ ] 2026-06-06 Publish the crate
 
 ## Unordered Lists
 

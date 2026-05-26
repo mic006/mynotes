@@ -1,14 +1,14 @@
 //! Self-hosted website to publish personal notes, in markdown format
 
 mod config;
-mod index;
 mod markdown;
 mod mdtree;
+mod render;
 mod settings;
 
 use std::env;
 use std::path::PathBuf;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::SystemTime;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
@@ -22,13 +22,18 @@ use rocket_async_compression::Compression;
 use serde::Deserialize;
 
 use config::AppConfig;
+use time::OffsetDateTime;
 
 use crate::markdown::{MarkdownFile, RE_TODO_ITEM};
+use crate::mdtree::MdTree;
 
 /// Pattern in template file, where title shall be inserted.
 const TEMPLATE_PATTERN_TITLE: &str = "%TITLE%";
 /// Pattern in template file, where content shall be inserted.
 const TEMPLATE_PATTERN_CONTENT: &str = "%CONTENT%";
+
+/// `MdTree` shared between threads.
+type SharedMdTree = Arc<Mutex<MdTree>>;
 
 /// Request guard that ensures a user is authenticated via Basic Auth.
 struct AuthenticatedUser(String);
@@ -153,18 +158,13 @@ async fn get(
     file: PathBuf,
     _user: AuthenticatedUser,
     config: &rocket::State<AppConfig>,
+    md_tree: &rocket::State<SharedMdTree>,
 ) -> Option<GetResponse> {
+    let now = OffsetDateTime::now_utc().date();
+
     // Specific handling for the main page (empty path).
     if file.as_os_str().is_empty() {
-        let mut root_node = index::Dir::default();
-        index::walk(
-            config.content_path.clone(),
-            &config.content_path,
-            &mut root_node,
-            config,
-        );
-        let mut body_content = String::new();
-        root_node.render(&mut body_content, config);
+        let body_content = render::get_body_index(&mut md_tree.lock().unwrap(), config, &now);
         return Some(GetResponse::build_html(
             config,
             "MyNotes - Index",
@@ -263,17 +263,20 @@ fn rocket() -> _ {
     let rocket = rocket::build();
 
     // Extract the custom "app" section from rocket.toml
-    let mut app_config: AppConfig = rocket
+    let mut config: AppConfig = rocket
         .figment()
         .extract_inner("app")
         .expect("Configuration 'app' section is missing in Rocket.toml");
-    app_config
+    config
         .load_template()
         .expect("Failed to load template file");
 
+    let md_tree = Arc::new(Mutex::new(mdtree::MdTree::new(config.content_path.clone())));
+
     rocket
         // Inject the loaded configuration into Rocket's state.
-        .manage(app_config)
+        .manage(config)
+        .manage(md_tree)
         .attach(Compression::fairing())
         .mount("/", rocket::routes![get, post])
         .register("/", rocket::catchers![unauthorized])

@@ -8,7 +8,7 @@ This file demonstrates basic Markdown formatting.
 
 #### Even Smaller Heading
 
-Next: 2026-06-21 Summer is coming
+- [ ] 2026-06-21 Summer is coming
 
 ## Text Styling
 
