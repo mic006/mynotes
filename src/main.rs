@@ -3,6 +3,7 @@
 mod config;
 mod index;
 mod markdown;
+mod mdtree;
 mod settings;
 
 use std::env;
