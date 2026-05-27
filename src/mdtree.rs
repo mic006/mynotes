@@ -39,14 +39,12 @@ pub struct MdTree {
 }
 
 impl MdTree {
-    /// Create a new cache by walking the content directory.
+    /// Lazy creation, content will be populated when needed
     pub fn new(content_path: PathBuf) -> Self {
-        let mut tree = Self {
+        Self {
             root: Dir::default(),
             content_path,
-        };
-        tree.refresh();
-        tree
+        }
     }
 
     /// Refresh the cache: add new files, update changed ones, remove deleted ones.

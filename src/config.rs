@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::SystemTime;
 
 /// Application configuration mapped from Rocket.toml app field
 #[derive(Deserialize, Default, Debug)]
@@ -16,7 +17,36 @@ pub struct AppConfig {
     pub template_path: PathBuf,
     /// Content of the template file, loaded at startup.
     #[serde(skip)]
-    pub template_content: String,
+    template_content_cache: TemplateContentCache,
+}
+
+#[derive(Debug)]
+struct TemplateContentCache {
+    /// File path,
+    path: PathBuf,
+    /// last modification time when the file was read
+    mtime: SystemTime,
+    /// Content of the template file
+    content: String,
+}
+impl Default for TemplateContentCache {
+    fn default() -> Self {
+        Self {
+            path: PathBuf::new(),
+            mtime: SystemTime::UNIX_EPOCH,
+            content: String::new(),
+        }
+    }
+}
+impl TemplateContentCache {
+    fn get_content(&mut self) -> std::io::Result<&str> {
+        let current_mtime = std::fs::metadata(&self.path)?.modified()?;
+        if self.mtime != current_mtime {
+            self.content = std::fs::read_to_string(&self.path)?;
+            self.mtime = current_mtime;
+        }
+        Ok(&self.content)
+    }
 }
 
 /// Due actions configuration
@@ -43,10 +73,10 @@ impl Default for AppConfigDueAction {
 }
 
 impl AppConfig {
-    /// Reads the template file into memory.
-    pub fn load_template(&mut self) -> std::io::Result<()> {
-        self.template_content =
-            std::fs::read_to_string(self.content_path.join(&self.template_path))?;
-        Ok(())
+    pub fn get_html_template(&mut self) -> std::io::Result<&str> {
+        if self.template_content_cache.path.as_os_str().is_empty() {
+            self.template_content_cache.path = self.content_path.join(&self.template_path);
+        }
+        self.template_content_cache.get_content()
     }
 }

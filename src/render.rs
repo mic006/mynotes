@@ -45,7 +45,7 @@ pub fn get_body_index(md_tree: &mut MdTree, config: &AppConfig, now: &Date) -> S
     let mut html = String::new();
 
     // render due actions
-    html.push_str("<h2>Due actions</h2>");
+    let _ = write!(html, "<h2>{}</h2>", config.due_action.title);
     if due_actions.is_empty() {
         html.push_str("None");
     } else {
