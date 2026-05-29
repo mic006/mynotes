@@ -26,15 +26,19 @@ use time::OffsetDateTime;
 
 use crate::markdown::{MarkdownFile, RE_TODO_ITEM};
 use crate::mdtree::MdTree;
+use crate::render::HtmlTemplate;
 
 /// Pattern in template file, where title shall be inserted.
 const TEMPLATE_PATTERN_TITLE: &str = "%TITLE%";
 /// Pattern in template file, where content shall be inserted.
 const TEMPLATE_PATTERN_CONTENT: &str = "%CONTENT%";
 
-// Shared rocket states
-type SharedAppConfig = Arc<Mutex<AppConfig>>;
-type SharedMdTree = Arc<Mutex<MdTree>>;
+/// Shared rocket state
+struct AppState {
+    html_template: HtmlTemplate,
+    md_tree: MdTree,
+}
+type SharedAppState = Arc<Mutex<AppState>>;
 
 /// Request guard that ensures a user is authenticated via Basic Auth.
 struct AuthenticatedUser(String);
@@ -59,9 +63,8 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                 // Retrieve the AppConfig from Rocket's managed state.
                 let config = request
                     .rocket()
-                    .state::<SharedAppConfig>()
+                    .state::<AppConfig>()
                     .expect("Config not managed");
-                let config = config.lock().unwrap();
 
                 let (user, pass) = (parts[0], parts[1]);
                 // Validate credentials against the configuration.
@@ -97,13 +100,19 @@ enum GetResponse {
 }
 impl GetResponse {
     /// Build HTML from template
-    fn build_html(config: &mut AppConfig, title: &str, body: &str) -> std::io::Result<Self> {
+    fn build_html(
+        config: &AppConfig,
+        state: &mut AppState,
+        title: &str,
+        body: &str,
+    ) -> std::io::Result<Self> {
         static RE_STATIC_RESOURCE: LazyLock<Regex> = LazyLock::new(|| {
             Regex::new(r#"(<(?:link|script|img) [^<>]*(?:src|href))="([^"]*)""#).unwrap()
         });
 
-        let html_output = config
-            .get_html_template()?
+        let html_output = state
+            .html_template
+            .get_content()?
             .replace(TEMPLATE_PATTERN_TITLE, title)
             .replace(TEMPLATE_PATTERN_CONTENT, body);
 
@@ -159,24 +168,19 @@ impl<'r> Responder<'r, 'static> for GetResponse {
 async fn get(
     file: PathBuf,
     _user: AuthenticatedUser,
-    config: &rocket::State<SharedAppConfig>,
-    md_tree: &rocket::State<SharedMdTree>,
+    config: &rocket::State<AppConfig>,
+    state: &rocket::State<SharedAppState>,
 ) -> Option<GetResponse> {
     let now = OffsetDateTime::now_utc().date();
 
     // Specific handling for the main page (empty path).
     if file.as_os_str().is_empty() {
-        let mut config = config.lock().unwrap();
-        let body_content = render::get_body_index(&mut md_tree.lock().unwrap(), &config, &now);
-        return GetResponse::build_html(&mut config, "MyNotes - Index", &body_content).ok();
+        let mut state = state.lock().unwrap();
+        let body_content = render::get_body_index(&mut state.md_tree, config, &now);
+        return GetResponse::build_html(config, &mut state, "MyNotes - Index", &body_content).ok();
     }
 
-    let path = {
-        let config = config.lock().unwrap();
-        let mut path = config.content_path.clone();
-        path.push(&file);
-        path
-    };
+    let path = config.content_path.join(&file);
 
     // If the file exists and is not markdown (e.g. an image), serve it directly.
     let meta = std::fs::metadata(&path).ok()?;
@@ -187,9 +191,9 @@ async fn get(
         return NamedFile::open(path).await.ok().map(GetResponse::File);
     }
 
-    let mut config = config.lock().unwrap();
-    let md_file = MarkdownFile::read(&file.to_string_lossy(), true, &config)?;
-    GetResponse::build_html(&mut config, &md_file.title, &md_file.html.unwrap()).ok()
+    let mut state = state.lock().unwrap();
+    let md_file = MarkdownFile::read(&file.to_string_lossy(), true, config)?;
+    GetResponse::build_html(config, &mut state, &md_file.title, &md_file.html.unwrap()).ok()
 }
 
 /// Structure for checkbox update payload.
@@ -205,9 +209,8 @@ fn post(
     file: PathBuf,
     update: Json<CheckboxUpdate>,
     _user: AuthenticatedUser,
-    config: &rocket::State<SharedAppConfig>,
+    config: &rocket::State<AppConfig>,
 ) -> Result<Status, Status> {
-    let config = config.lock().unwrap();
     let full_path = config.content_path.join(&file);
 
     let content = std::fs::read_to_string(&full_path).map_err(|e| {
@@ -269,12 +272,14 @@ fn rocket() -> _ {
         .extract_inner("app")
         .expect("Configuration 'app' section is missing in Rocket.toml");
 
-    let md_tree = Arc::new(Mutex::new(mdtree::MdTree::new(config.content_path.clone())));
+    let state = Arc::new(Mutex::new(AppState {
+        html_template: HtmlTemplate::new(config.content_path.join(&config.template_path)),
+        md_tree: MdTree::new(config.content_path.clone()),
+    }));
 
     rocket
-        // Inject the loaded configuration into Rocket's state.
-        .manage(Arc::new(Mutex::new(config)))
-        .manage(md_tree)
+        .manage(config)
+        .manage(state)
         .attach(Compression::fairing())
         .mount("/", rocket::routes![get, post])
         .register("/", rocket::catchers![unauthorized])

@@ -1,10 +1,41 @@
 use std::fmt::Write as _;
+use std::path::PathBuf;
+use std::time::SystemTime;
 
 use time::Date;
 use time::format_description::well_known::Iso8601;
 
 use crate::config::{AppConfig, AppConfigDueAction};
 use crate::mdtree::{DueAction, MdTree};
+
+/// Cache for HTML template file
+pub struct HtmlTemplate {
+    /// File path,
+    path: PathBuf,
+    /// last modification time when the file was read
+    mtime: SystemTime,
+    /// Content of the template file
+    content: String,
+}
+impl HtmlTemplate {
+    pub fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            mtime: SystemTime::UNIX_EPOCH,
+            content: String::new(),
+        }
+    }
+
+    /// Get template content
+    pub fn get_content(&mut self) -> std::io::Result<&str> {
+        let current_mtime = std::fs::metadata(&self.path)?.modified()?;
+        if self.mtime != current_mtime {
+            self.content = std::fs::read_to_string(&self.path)?;
+            self.mtime = current_mtime;
+        }
+        Ok(&self.content)
+    }
+}
 
 impl DueAction {
     /// Get CSS class for this due action.
