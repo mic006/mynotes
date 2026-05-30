@@ -1,7 +1,6 @@
 //! Self-hosted website to publish personal notes, in markdown format
 
 mod config;
-mod markdown;
 mod mdtree;
 mod render;
 mod settings;
@@ -24,8 +23,7 @@ use serde::Deserialize;
 use config::AppConfig;
 use time::OffsetDateTime;
 
-use crate::markdown::{MarkdownFile, RE_TODO_ITEM};
-use crate::mdtree::MdTree;
+use crate::mdtree::{CheckboxTask, MdTree};
 use crate::render::HtmlTemplate;
 
 /// Pattern in template file, where title shall be inserted.
@@ -192,8 +190,10 @@ async fn get(
     }
 
     let mut state = state.lock().unwrap();
-    let md_file = MarkdownFile::read(&file.to_string_lossy(), true, config)?;
-    GetResponse::build_html(config, &mut state, &md_file.title, &md_file.html.unwrap()).ok()
+    let md_file = state.md_tree.get_md_file(&file.to_string_lossy())?;
+    let body_content = render::get_body_md(md_file, config, &now);
+    let md_file_title = md_file.title.clone();
+    GetResponse::build_html(config, &mut state, &md_file_title, &body_content).ok()
 }
 
 /// Structure for checkbox update payload.
@@ -219,15 +219,13 @@ fn post(
     })?;
 
     let mut found_and_updated = false;
-    let new_content = RE_TODO_ITEM.replace_all(&content, |caps: &regex::Captures<'_>| {
-        let (_, [indent, _checked, text]) = caps.extract();
-        if text == update.label {
+    let new_content = CheckboxTask::replace(&content, |mut ct| {
+        if ct.text == update.label {
             found_and_updated = true;
-            let new_checked_char = if update.state { 'x' } else { ' ' };
-            format!("{indent}- [{new_checked_char}] {text}")
+            ct.checked = update.state;
+            Some(ct.to_string())
         } else {
-            // Return the original matched string if it's not the target label
-            caps.get(0).unwrap().as_str().to_string()
+            None
         }
     });
 

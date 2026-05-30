@@ -1,6 +1,8 @@
 //! Manage the tree of Markdown files
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashSet};
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 use std::time::SystemTime;
@@ -9,25 +11,77 @@ use regex::Regex;
 use time::Date;
 use time::format_description::well_known::Iso8601;
 
-/// TODO item pattern
-///
-/// Use github markdown todo item = checkbox in a list item
-///
-/// Examples:
-/// - [x] text
-///   - [ ] text
-pub static RE_TODO_ITEM: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)^(\s*)-\s*\[([ x])\]\s*(.*)$").unwrap());
+/// Regex used by `CheckboxTask`
+static RE_CHECKBOX_DUE_ACTION: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^( *)- *\[([ x])\] *((?:\d{4}-\d{2}-\d{2})?) *(.*)$").unwrap()
+});
 
-/// Due action pattern
-///
-/// Use a TODO item, with a date using ISO8601 format at the beginning of the text
-/// Only unchecked (not done) items are matching
-///
-/// Example:
-/// - [ ] 2026-06-06 some action
-pub static RE_DUE_ACTION: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)^(\s*)-\s*\[ \]\s*(\d{4}-\d{2}-\d{2}) (.*)$").unwrap());
+/// Item extracted from a checkbox task line.
+#[derive(Debug, PartialEq)]
+pub struct CheckboxTask<'s> {
+    /// Indentation before the dash.
+    pub indent: &'s str,
+    /// State of the checkbox.
+    pub checked: bool,
+    /// Due date, in ISO8601 format.
+    pub date: Option<&'s str>,
+    /// Description of the task.
+    pub text: &'s str,
+}
+
+impl<'s, 'c> From<(&'s str, &'c regex::Captures<'c>)> for CheckboxTask<'s> {
+    fn from((haystack, caps): (&'s str, &'c regex::Captures<'c>)) -> Self {
+        // lifetime trick: slice haystack to get haystack's lifetime
+        let get = |i| &haystack[caps.get(i).unwrap().range()];
+        Self {
+            indent: get(1),
+            checked: get(2) == "x",
+            date: Some(get(3)).filter(|s| !s.is_empty()),
+            text: get(4),
+        }
+    }
+}
+
+impl<'s> CheckboxTask<'s> {
+    /// Returns an iterator over all checkbox tasks found in the haystack.
+    pub fn iter(haystack: &'s str) -> impl Iterator<Item = Self> + 's {
+        RE_CHECKBOX_DUE_ACTION
+            .captures_iter(haystack)
+            .map(move |caps| Self::from((haystack, &caps)))
+    }
+
+    /// Modify checkbox tasks in the haystack.
+    ///
+    /// f: return `None` to keep the current string, `Some(replacement_text)` to replace
+    pub fn replace(haystack: &'s str, mut f: impl FnMut(Self) -> Option<String>) -> Cow<'s, str> {
+        RE_CHECKBOX_DUE_ACTION.replace_all(haystack, |caps: &regex::Captures<'_>| {
+            let task = Self::from((haystack, caps));
+            if let Some(new_text) = f(task) {
+                new_text
+            } else {
+                // no replacement, keep current string
+                caps.get(0).unwrap().as_str().to_string()
+            }
+        })
+    }
+
+    /// Parse the date field
+    pub fn parse_date(&self) -> Option<Date> {
+        self.date
+            .and_then(|date| Date::parse(date, &Iso8601::DATE).ok())
+    }
+}
+
+impl Display for CheckboxTask<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let checked_char = if self.checked { 'x' } else { ' ' };
+        write!(f, "{}- [{}]", self.indent, checked_char)?;
+        if let Some(date) = self.date {
+            write!(f, " {date}")?;
+        }
+        write!(f, " {}", self.text)
+    }
+}
 
 /// Access to the markdown files tree
 ///
@@ -178,7 +232,7 @@ pub struct MdFile {
     /// Due actions in the file
     pub due_actions: Vec<DueAction>,
     /// Raw Markdown body, before any rendering
-    raw_md_body: String,
+    pub raw_md_body: String,
 }
 
 impl MdFile {
@@ -214,13 +268,17 @@ impl MdFile {
     }
 
     fn get_due_actions(content: &str) -> Vec<DueAction> {
-        RE_DUE_ACTION
-            .captures_iter(content)
-            .map(|caps| {
-                let (_, [_, date, action]) = caps.extract();
-                DueAction {
-                    date: Date::parse(date, &Iso8601::DATE).unwrap(),
-                    action: action.to_string(),
+        CheckboxTask::iter(content)
+            .filter_map(|ct| {
+                if !ct.checked
+                    && let Some(date) = ct.parse_date()
+                {
+                    Some(DueAction {
+                        date,
+                        action: ct.text.to_string(),
+                    })
+                } else {
+                    None
                 }
             })
             .collect()
@@ -276,6 +334,46 @@ mod tests {
         let (title, body) = MdFile::split_title_body(content).expect("Should parse");
         assert_eq!(title, "Title");
         assert_eq!(body, "Line 1\nLine 2\nLine 3");
+    }
+
+    #[test]
+    fn test_checkbox_task_iter() {
+        let content = r"
+- [ ] 2026-01-01 First action
+- [x] 2026-01-02 Completed action
+  - [ ] 2026-01-03 Indented action
+Some other text without a task.
+  - [ ] task without date
+";
+        let items = CheckboxTask::iter(content).collect::<Vec<_>>();
+
+        let expected_items = vec![
+            CheckboxTask {
+                indent: "",
+                checked: false,
+                date: Some("2026-01-01"),
+                text: "First action",
+            },
+            CheckboxTask {
+                indent: "",
+                checked: true,
+                date: Some("2026-01-02"),
+                text: "Completed action",
+            },
+            CheckboxTask {
+                indent: "  ",
+                checked: false,
+                date: Some("2026-01-03"),
+                text: "Indented action",
+            },
+            CheckboxTask {
+                indent: "  ",
+                checked: false,
+                date: None,
+                text: "task without date",
+            },
+        ];
+        assert_eq!(items, expected_items);
     }
 
     #[test]

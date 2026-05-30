@@ -2,11 +2,13 @@ use std::fmt::Write as _;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use pulldown_cmark::Parser;
 use time::Date;
 use time::format_description::well_known::Iso8601;
 
-use crate::config::{AppConfig, AppConfigDueAction};
-use crate::mdtree::{DueAction, MdTree};
+use crate::config::AppConfig;
+use crate::mdtree::{CheckboxTask, MdFile, MdTree};
+use crate::settings;
 
 /// Cache for HTML template file
 pub struct HtmlTemplate {
@@ -37,19 +39,6 @@ impl HtmlTemplate {
     }
 }
 
-impl DueAction {
-    /// Get CSS class for this due action.
-    pub fn get_css_style(&self, now: &Date, config: &AppConfigDueAction) -> &'static str {
-        let remaining_days = (self.date - *now).whole_days();
-        if remaining_days >= config.warn_future_days {
-            "mynotes-date-ok"
-        } else if remaining_days >= config.alert_future_days {
-            "mynotes-date-warn"
-        } else {
-            "mynotes-date-alert"
-        }
-    }
-}
 /// Get HTML body for index page
 pub fn get_body_index(md_tree: &mut MdTree, config: &AppConfig, now: &Date) -> String {
     let md_files = md_tree.md_files_iter().collect::<Vec<_>>();
@@ -83,7 +72,7 @@ pub fn get_body_index(md_tree: &mut MdTree, config: &AppConfig, now: &Date) -> S
         due_actions.sort_by_key(|(_, due_action)| due_action.date);
         html.push_str("<ul>");
         for (md_file, due_action) in due_actions {
-            let style = due_action.get_css_style(now, &config.due_action);
+            let style = config.due_action.get_css_style(now, &due_action.date);
             let _ = write!(
                 html,
                 r#"<li><span class="mynotes-date {style}">{}</span> {} - <a href="{}">{}</a></li>"#,
@@ -109,4 +98,81 @@ pub fn get_body_index(md_tree: &mut MdTree, config: &AppConfig, now: &Date) -> S
     html.push_str("</ul>");
 
     html
+}
+
+/// Get HTML body for Markdown page
+pub fn get_body_md(md_file: &MdFile, config: &AppConfig, now: &Date) -> String {
+    let mut md_content = md_file.raw_md_body.clone();
+
+    // patches before MD to HTML transformation
+    patch_md_checkbox_tasks(&mut md_content, &md_file.href, config, now);
+    settings::user_process_markdown(&mut md_content);
+
+    // MD to HTML
+    let parser = Parser::new_ext(&md_content, settings::get_markdown_options());
+    let mut html = String::new();
+    pulldown_cmark::html::push_html(&mut html, parser);
+
+    html
+}
+
+/** MD patch: handle checkbox tasks
+ *
+ * pulldown-cmark can render TODO items, but there is no flexibility.
+ *
+ * Wanted behavior:
+ * - put input inside a label element to be cleaner
+ * - add data-* attributes to allow user check and server update
+ * - highlight due date if present
+ */
+fn patch_md_checkbox_tasks(
+    md_content: &mut String,
+    rel_path: &str,
+    config: &AppConfig,
+    now: &Date,
+) {
+    *md_content = CheckboxTask::replace(md_content, |ct|{
+        let opt_date_str=  ct.parse_date().map(|date| {
+            let style = config.due_action.get_css_style(now, &date);
+            format!(r#" <span class="mynotes-date {style}">{}</span>"#, ct.date.unwrap())
+        }
+        );
+        Some(format!(
+            r#"{}- <label><input type="checkbox"{} data-url="/{rel_path}" data-label="{}">{} {}</label>"#,
+            ct.indent,
+            if ct.checked { " checked" } else { "" },
+            ct.text,
+            opt_date_str.as_ref().map_or("", |s| s),
+            ct.text
+        ))}
+    ).to_string();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_patch_md_checkbox_tasks() {
+        let mut content = String::from(
+            r"- [ ] Unchecked
+- [x] Checked
+  - [ ] Indented
+- [ ] 2026-05-30 Today
+- [x] 2027-06-06 Far future
+Not a todo item",
+        );
+        let rel_path = "test.md";
+        let config = AppConfig::default();
+        let now = Date::parse("2026-05-30", &Iso8601::DATE).unwrap();
+        patch_md_checkbox_tasks(&mut content, rel_path, &config, &now);
+
+        let expected = r#"- <label><input type="checkbox" data-url="/test.md" data-label="Unchecked"> Unchecked</label>
+- <label><input type="checkbox" checked data-url="/test.md" data-label="Checked"> Checked</label>
+  - <label><input type="checkbox" data-url="/test.md" data-label="Indented"> Indented</label>
+- <label><input type="checkbox" data-url="/test.md" data-label="Today"> <span class="mynotes-date mynotes-date-warn">2026-05-30</span> Today</label>
+- <label><input type="checkbox" checked data-url="/test.md" data-label="Far future"> <span class="mynotes-date mynotes-date-ok">2027-06-06</span> Far future</label>
+Not a todo item"#;
+        assert_eq!(content, expected);
+    }
 }

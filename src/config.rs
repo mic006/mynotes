@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use time::Date;
 
 /// Application configuration mapped from Rocket.toml app field
 #[derive(Deserialize, Default, Debug)]
@@ -35,6 +36,19 @@ impl Default for AppConfigDueAction {
             ignore_future_days: 60,
             warn_future_days: 30,
             alert_future_days: 0,
+        }
+    }
+}
+impl AppConfigDueAction {
+    /// Get CSS class for a due date.
+    pub fn get_css_style(&self, now: &Date, due_date: &Date) -> &'static str {
+        let remaining_days = (*due_date - *now).whole_days();
+        if remaining_days >= self.warn_future_days {
+            "mynotes-date-ok"
+        } else if remaining_days >= self.alert_future_days {
+            "mynotes-date-warn"
+        } else {
+            "mynotes-date-alert"
         }
     }
 }
