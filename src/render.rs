@@ -75,7 +75,9 @@ pub fn get_body_index(md_tree: &mut MdTree, config: &AppConfig, now: &Date) -> S
             let style = config.due_action.get_css_style(now, &due_action.date);
             let _ = write!(
                 html,
-                r#"<li><span class="mynotes-date {style}">{}</span> {} - <a href="{}">{}</a></li>"#,
+                r#"<li><label><input type="checkbox" data-url="/{}" data-label="{}"> <span class="mynotes-date {style}">{}</span> {} - <a href="{}">{}</a></label></li>"#,
+                md_file.href,
+                due_action.action,
                 due_action.date.format(&Iso8601::DATE).unwrap(),
                 due_action.action,
                 md_file.href,

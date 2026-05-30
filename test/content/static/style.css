@@ -160,7 +160,8 @@ th {
     padding-right: 5px;
 }
 
-.mynotes-date-ok {
+.mynotes-date-ok,
+input[type="checkbox"]:checked+.mynotes-date {
     color: #28a745;
 }
 
