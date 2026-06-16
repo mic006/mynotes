@@ -17,6 +17,7 @@ use rocket::http::{Header, Status};
 use rocket::request::{FromRequest, Outcome, Request};
 use rocket::response::{self, Responder, Response, content::RawHtml};
 use rocket::serde::json::Json;
+use rocket::shield::{Hsts, Shield};
 use rocket_async_compression::Compression;
 use serde::Deserialize;
 
@@ -275,10 +276,13 @@ fn rocket() -> _ {
         md_tree: MdTree::new(config.content_path.clone()),
     }));
 
+    let shield = Shield::default().enable(Hsts::IncludeSubDomains(time::Duration::days(365)));
+
     rocket
         .manage(config)
         .manage(state)
         .attach(Compression::fairing())
+        .attach(shield)
         .mount("/", rocket::routes![get, post])
         .register("/", rocket::catchers![unauthorized])
 }

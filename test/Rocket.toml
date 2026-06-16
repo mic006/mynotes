@@ -5,6 +5,7 @@
 port = 12345
 workers = 2
 ident = false
+log_level = "normal"
 
 # MyNotes app config
 [default.app]
