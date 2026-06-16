@@ -2,6 +2,7 @@
 
 mod config;
 mod mdtree;
+mod persist;
 mod render;
 mod settings;
 

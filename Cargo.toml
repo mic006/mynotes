@@ -11,7 +11,7 @@ repository = "https://github.com/mic006/mynotes"
 [dependencies]
 base64 = "0.22.1"
 pulldown-cmark = "0.13.4"
-regex = { version = "1.12.3", default-features = false, features = [
+regex = { version = "1.12.4", default-features = false, features = [
     "std",
     "perf",
     "unicode-perl",
@@ -19,7 +19,8 @@ regex = { version = "1.12.3", default-features = false, features = [
 rocket = { version = "0.5.1", features = ["json", "tls"] }
 rocket_async_compression = "0.6.1"
 serde = { version = "1.0.228", features = ["derive"] }
-time = "0.3.47"
+time = { version = "0.3.49", features = ["serde", "serde-well-known"] }
+toml = "1.1.2"
 
 [lints.rust]
 warnings = "warn"

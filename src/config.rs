@@ -15,6 +15,8 @@ pub struct AppConfig {
     pub users: HashMap<String, String>,
     /// Path to the HTML template file, relative to `content_path`.
     pub template_path: PathBuf,
+    /// Path to persistency file, storing application state, in TOML format.
+    pub persist_path: PathBuf,
 }
 
 /// Due actions configuration
