@@ -17,6 +17,8 @@ pub struct AppConfig {
     pub template_path: PathBuf,
     /// Path to persistency file, storing application state, in TOML format.
     pub persist_path: PathBuf,
+    /// Configuration to send email for due actions.
+    pub mail: Option<AppConfigMail>,
 }
 
 /// Due actions configuration
@@ -56,4 +58,21 @@ impl AppConfigDueAction {
             "mynotes-date-alert"
         }
     }
+}
+
+/// Configuration to send email for due actions
+#[derive(Deserialize, Debug)]
+pub struct AppConfigMail {
+    /// Mail title
+    pub title: String,
+    /// SMTP server address
+    pub smtp_addr: String,
+    /// SMTP server port
+    pub smtp_port: u16,
+    /// SMTP username
+    pub smtp_user: String,
+    /// SMTP password
+    pub smtp_password: String,
+    /// Sender email
+    pub sender_email: String,
 }

@@ -10,6 +10,11 @@ repository = "https://github.com/mic006/mynotes"
 
 [dependencies]
 base64 = "0.22.1"
+lettre = { version = "0.11.22", default-features = false, features = [
+    "builder",
+    "smtp-transport",
+    "tokio1-native-tls",
+] }
 pulldown-cmark = "0.13.4"
 regex = { version = "1.12.4", default-features = false, features = [
     "std",
@@ -20,6 +25,7 @@ rocket = { version = "0.5.1", features = ["json", "tls"] }
 rocket_async_compression = "0.6.1"
 serde = { version = "1.0.228", features = ["derive"] }
 time = { version = "0.3.49", features = ["serde", "serde-well-known"] }
+tokio = { version = "1.52.3", features = ["full"] }
 toml = "1.1.2"
 
 [lints.rust]

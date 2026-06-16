@@ -1,6 +1,7 @@
 //! Self-hosted website to publish personal notes, in markdown format
 
 mod config;
+mod mail;
 mod mdtree;
 mod persist;
 mod render;
