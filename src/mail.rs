@@ -3,19 +3,19 @@ use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
-use crate::config::AppConfigMail;
+use crate::config::AppConfigMailAlert;
 
 /// Sends an email with the provided HTML body using the configuration.
 pub async fn send_mail(
     body_html: &str,
-    config: &AppConfigMail,
+    config: &AppConfigMailAlert,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Build the email message
     let email = Message::builder()
         .from(config.sender_email.parse()?)
         // Using the configured SMTP user as the recipient for notifications.
         .to(config.smtp_user.parse()?)
-        .subject(&config.title)
+        .subject(&config.mail_title)
         .singlepart(SinglePart::html(body_html.to_string()))?;
 
     let creds = Credentials::new(config.smtp_user.clone(), config.smtp_password.clone());
@@ -48,13 +48,14 @@ mod tests {
     #[ignore = "to be launched manually, after providing a suitable configuration"]
     #[tokio::test]
     async fn test_send_mail() -> Result<(), Box<dyn std::error::Error>> {
-        let config = AppConfigMail {
-            title: "UT mynotes".to_string(),
+        let config = AppConfigMailAlert {
+            mail_title: "UT mynotes".to_string(),
             smtp_addr: "smtp.example.com".to_string(),
             smtp_port: 587,
             smtp_user: "user".to_string(),
             smtp_password: "password".to_string(),
             sender_email: "user@example.com".to_string(),
+            ..Default::default()
         };
 
         send_mail(

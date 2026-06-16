@@ -57,8 +57,8 @@ pub fn get_body_index(md_tree: &mut MdTree, config: &AppConfig, now: &Date) -> S
                 .map(move |due_action| (md_file, due_action))
         })
         .filter(|(_, due_action)| {
-            let remaining_days = (due_action.date - *now).whole_days();
-            remaining_days < config.due_action.ignore_future_days
+            let category = config.due_action.get_category(now, &due_action.date);
+            category != crate::config::DueActionCategory::FarFuture
         })
         .collect::<Vec<_>>();
 
@@ -72,7 +72,8 @@ pub fn get_body_index(md_tree: &mut MdTree, config: &AppConfig, now: &Date) -> S
         due_actions.sort_by_key(|(_, due_action)| due_action.date);
         html.push_str("<ul>");
         for (md_file, due_action) in due_actions {
-            let style = config.due_action.get_css_style(now, &due_action.date);
+            let category = config.due_action.get_category(now, &due_action.date);
+            let style = category.get_css_style();
             let _ = write!(
                 html,
                 r#"<li><label><input type="checkbox" data-url="/{}" data-label="{}"> <span class="mynotes-date {style}">{}</span> {} - <a href="{}">{}</a></label></li>"#,
@@ -135,7 +136,8 @@ fn patch_md_checkbox_tasks(
 ) {
     *md_content = CheckboxTask::replace(md_content, |ct|{
         let opt_date_str=  ct.parse_date().map(|date| {
-            let style = config.due_action.get_css_style(now, &date);
+            let category = config.due_action.get_category(now, &date);
+            let style = category.get_css_style();
             format!(r#" <span class="mynotes-date {style}">{}</span>"#, ct.date.unwrap())
         }
         );

@@ -7,7 +7,7 @@ use time::OffsetDateTime;
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct PersistState {
     /// Timestamp of the last email notification sent to user.
-    #[serde(with = "time::serde::iso8601::option")]
+    #[serde(with = "time::serde::rfc3339::option")]
     pub last_notif: Option<OffsetDateTime>,
 }
 

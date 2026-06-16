@@ -9,6 +9,7 @@ license = "MIT"
 repository = "https://github.com/mic006/mynotes"
 
 [dependencies]
+anyhow = { version = "1.0.102", features = ["backtrace"] }
 base64 = "0.22.1"
 lettre = { version = "0.11.22", default-features = false, features = [
     "builder",
