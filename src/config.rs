@@ -22,6 +22,8 @@ pub struct AppConfig {
 pub struct AppConfigDueAction {
     /// Title for due actions in index page
     pub title: String,
+    /// String displayed when there is no due actions
+    pub empty_str: String,
     /// Ignore due actions when they are too far in the future
     pub ignore_future_days: i64,
     /// Warn for due actions in a near future
@@ -33,6 +35,7 @@ impl Default for AppConfigDueAction {
     fn default() -> Self {
         Self {
             title: "Due actions".to_string(),
+            empty_str: "None".to_string(),
             ignore_future_days: 60,
             warn_future_days: 30,
             alert_future_days: 0,

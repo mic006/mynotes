@@ -67,7 +67,7 @@ pub fn get_body_index(md_tree: &mut MdTree, config: &AppConfig, now: &Date) -> S
     // render due actions
     let _ = write!(html, "<h2>{}</h2>", config.due_action.title);
     if due_actions.is_empty() {
-        html.push_str("None");
+        html.push_str(&config.due_action.empty_str);
     } else {
         due_actions.sort_by_key(|(_, due_action)| due_action.date);
         html.push_str("<ul>");
